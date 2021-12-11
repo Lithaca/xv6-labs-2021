@@ -1,7 +1,7 @@
 #include "kernel/types.h"
 #include "kernel/stat.h"
 #include "kernel/fs.h"
-#include "user.h"
+#include "user/user.h"
 ////////////////////////////////////////////////////////////////////////////////
 typedef struct node {
   struct node *prev;
@@ -17,7 +17,7 @@ typedef struct queue {
 
 queue *initQueue();
 void freeQueue(queue *q);
-void enQueue(queue *q, const void * value);
+void enQueue(queue *q, void * value);
 void * deQueue(queue *q);
 int hasElem(const queue *q);
 
@@ -37,7 +37,7 @@ void find(char * root, char * filename)
   if(q == 0)
     exit(-1);
 
-  char buf[BUF_SIZE], *p, *path;
+  char buf[BUF_SIZE], *path, *p;
   int fd, len = strlen(root);
   struct dirent de;
   struct stat st;
@@ -81,6 +81,7 @@ void find(char * root, char * filename)
         {
           if(de.inum == 0)
             continue;
+          // printf("filename: %s\n", de.name);
           if('.' == de.name[0])
           {
             if(0 == de.name[1])
@@ -90,9 +91,9 @@ void find(char * root, char * filename)
           }
           memmove(p, de.name, DIRSIZ);
           p[DIRSIZ] = 0;
-          path = malloc(strlen(buf)+1);
-          strcpy(path, buf);
-          enQueue(q, path);
+          p = malloc(strlen(buf)+1);
+          strcpy(p, buf);
+          enQueue(q, p);
         }
         break;
     }
@@ -144,8 +145,8 @@ void freeQueue(queue *q) {
   free(q);
 }
 
-void enQueue(queue *q, const void * value) {
-  //printf("enQueue: %s\n", value);
+void enQueue(queue *q, void * value) {
+  // printf("enQueue: %s\n", value);
   node *new = malloc(sizeof(node));
   if(new == 0)
   {
@@ -154,7 +155,7 @@ void enQueue(queue *q, const void * value) {
   }
   new->prev = q->tail;
   new->next = 0;
-  new->value = (void*)value;
+  new->value = value;
   if (q->length == 0)
     q->head = new;
   else
@@ -172,6 +173,7 @@ void * deQueue(queue *q) {
   --q->length;
   res = p->value;
   free(p);
+  // printf("deQueue: %s\n", res);
   return res;
 }
 
