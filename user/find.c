@@ -20,17 +20,10 @@ void freeQueue(queue *q);
 void enQueue(queue *q, void * value);
 void * deQueue(queue *q);
 int hasElem(const queue *q);
+int match(char * path, char * pattern);
 
 #define BUF_SIZE 512
 ////////////////////////////////////////////////////////////////////////////////
-int match(const char * path, const char * filename)
-{
-  char * p = (char*)path + strlen(path);
-  while(p >= path && *p != '/')
-    --p;
-  ++p;
-  return !strcmp(p, filename);
-}
 void find(char * root, char * filename)
 {
   queue * q = initQueue();
@@ -73,7 +66,7 @@ void find(char * root, char * filename)
     switch(st.type)
     {
       case T_DEVICE:
-        if(!match(path, root))
+        if(path[0] != '.' || path[1] != 0)
           break;
       case T_DIR:
         *p++ = '/';
@@ -95,6 +88,7 @@ void find(char * root, char * filename)
           strcpy(p, buf);
           enQueue(q, p);
         }
+      default:
         break;
     }
     free(path);
@@ -146,7 +140,6 @@ void freeQueue(queue *q) {
 }
 
 void enQueue(queue *q, void * value) {
-  // printf("enQueue: %s\n", value);
   node *new = malloc(sizeof(node));
   if(new == 0)
   {
@@ -173,8 +166,56 @@ void * deQueue(queue *q) {
   --q->length;
   res = p->value;
   free(p);
-  // printf("deQueue: %s\n", res);
   return res;
 }
 
 int hasElem(const queue *q) { return (q->length == 0) ? 0 : -1; }
+
+
+// Regexp matcher from Kernighan & Pike,
+// The Practice of Programming, Chapter 9.
+
+int matchhere(char*, char*);
+int matchstar(int, char*, char*);
+
+int
+match(char *path, char *re)
+{
+  // get the filename after the last slash
+  char * text = path + strlen(path);
+  while(text >= path && *text != '/')
+    --text;
+  ++text;
+
+  if(re[0] == '^')
+    return matchhere(re+1, text);
+  do{  // must look at empty string
+    if(matchhere(re, text))
+      return 1;
+  }while(*text++ != '\0');
+  return 0;
+}
+
+// matchhere: search for re at beginning of text
+int matchhere(char *re, char *text)
+{
+  if(re[0] == '\0')
+    return 1;
+  if(re[1] == '*')
+    return matchstar(re[0], re+2, text);
+  if(re[0] == '$' && re[1] == '\0')
+    return *text == '\0';
+  if(*text!='\0' && (re[0]=='.' || re[0]==*text))
+    return matchhere(re+1, text+1);
+  return 0;
+}
+
+// matchstar: search for c*re at beginning of text
+int matchstar(int c, char *re, char *text)
+{
+  do{  // a * matches zero or more instances
+    if(matchhere(re, text))
+      return 1;
+  }while(*text!='\0' && (*text++==c || c=='.'));
+  return 0;
+}
