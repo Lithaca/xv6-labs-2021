@@ -3,6 +3,7 @@
 #include "kernel/fcntl.h"
 #include "kernel/stat.h"
 #include "user/user.h"
+#include "kernel/fs.h"
 
 // Parsed command representation
 #define EXEC 1
@@ -199,6 +200,57 @@ void runcmd(struct cmd *cmd) {
   exit(0);
 }
 
+char * gets_with_tab(char * buf, int max)
+{
+  int i = 0, cc, fd;
+  char c, *ci, *in;
+  struct dirent de;
+  while(i+1 < max)
+  {
+    cc = read(0, &c, 1);
+    if(cc < 1)
+      break;
+    if(c == '\t') // TODO tab completion
+    {
+      write(1, "tab", 3);
+      if((fd = open("./", 0)) >= 0)
+      {
+        buf[i] = 0;
+        while(read(fd, &de, sizeof(de)) == sizeof(de))
+        {
+          if(de.inum == 0)
+            continue;
+
+          if(strlen(buf) >= strlen(de.name))
+            continue;
+          else
+          {
+            in = buf + i;
+            ci = de.name;
+            while(*in && *ci && *in == *ci)
+            {
+              ++in;
+              ++ci;
+            }
+            write(1, ci, strlen(ci));
+            while(*ci)
+              buf[i++] = *ci++;
+            break;
+          }
+        }
+        close(fd);
+      }
+    }
+    else
+      buf[i++] = c;
+
+    if(c == '\n' || c == '\r')
+      break;
+  }
+  buf[i] = '\0';
+  return buf;
+}
+
 int getcmd(char *buf, int nbuf) {
   struct stat st;
   fstat(0, &st);
@@ -206,6 +258,8 @@ int getcmd(char *buf, int nbuf) {
     fprintf(2, "$ ");
   memset(buf, 0, nbuf);
   gets(buf, nbuf);
+  // gets_with_tab(buf, nbuf); // XXX gets with tab completion
+
   if (buf[0] == 0) // EOF
     return -1;
   return 0;
