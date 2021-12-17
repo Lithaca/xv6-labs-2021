@@ -6,5 +6,5 @@
 4. [x] Modify the shell to support wait
 5. [x] Modify the shell to support lists of commands, separated by ";"
 6. [x] Modify the shell to support sub-shells by implementing "(" and ")"
-7. [ ] Modify the shell to support tab completion
+7. [x] Modify the shell to support tab completion
 8. [x] Modify the shell to keep a history of passed shell commands

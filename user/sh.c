@@ -220,12 +220,19 @@ char * gets_with_tab(char * buf, int max)
         {
           if(de.inum == 0)
             continue;
-
-          if(strlen(buf) >= strlen(de.name))
-            continue;
           else
           {
-            in = buf;
+            // find the start of current word
+            in = buf + i;
+            while(*in != ' ' && in > buf)
+              --in;
+            if(*in == ' ')
+              ++in;
+
+            if(strlen(in) >= strlen(de.name))
+              continue;
+
+            // name matching
             ci = de.name;
             while(*in && *ci && *in == *ci)
             {
@@ -248,9 +255,6 @@ char * gets_with_tab(char * buf, int max)
     else
       buf[i++] = c;
 
-    if(c == '\t')
-      continue;
-
     if(c == '\n' || c == '\r')
       break;
   }
@@ -264,8 +268,7 @@ int getcmd(char *buf, int nbuf) {
   if (st.type != T_FILE)
     fprintf(2, "$ ");
   memset(buf, 0, nbuf);
-  // gets(buf, nbuf);
-  gets_with_tab(buf, nbuf); // XXX gets with tab completion
+  gets_with_tab(buf, nbuf);
 
   if (buf[0] == 0) // EOF
     return -1;
