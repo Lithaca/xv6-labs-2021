@@ -94,6 +94,7 @@ struct cmd *parsebuiltin(char *str) {
   else if (!strcmp("wait", str))
     bcmd->cmd = BUILTIN_WAIT;
   else {
+    *cmd = (bcmd->arg) ? ' ' : 0; // Don't forget here! Or will chopped args
     free(bcmd);
     return 0;
   }
