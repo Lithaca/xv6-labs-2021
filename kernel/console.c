@@ -43,7 +43,7 @@ consputc(int c)
 
 struct {
   struct spinlock lock;
-  
+
   // input
 #define INPUT_BUF 128
   char buf[INPUT_BUF];
@@ -155,6 +155,11 @@ consoleintr(int c)
       consputc(BACKSPACE);
     }
     break;
+  case '\t':
+    cons.buf[cons.e++ % INPUT_BUF] = c;
+    cons.w = cons.e;
+    wakeup(&cons.r);
+    break;
   default:
     if(c != 0 && cons.e-cons.r < INPUT_BUF){
       c = (c == '\r') ? '\n' : c;
@@ -165,7 +170,7 @@ consoleintr(int c)
       // store for consumption by consoleread().
       cons.buf[cons.e++ % INPUT_BUF] = c;
 
-      if(c == '\n' || c == C('D') || cons.e == cons.r+INPUT_BUF){
+      if(c == '\n' || c == '\t' || c == C('D') || cons.e == cons.r+INPUT_BUF){
         // wake up consoleread() if a whole line (or end-of-file)
         // has arrived.
         cons.w = cons.e;
@@ -174,7 +179,7 @@ consoleintr(int c)
     }
     break;
   }
-  
+
   release(&cons.lock);
 }
 

@@ -210,9 +210,8 @@ char * gets_with_tab(char * buf, int max)
     cc = read(0, &c, 1);
     if(cc < 1)
       break;
-    if(c == '\t') // TODO tab completion
+    if(c == '\t')
     {
-      write(1, "tab", 3);
       if((fd = open("./", 0)) >= 0)
       {
         buf[i] = 0;
@@ -225,16 +224,20 @@ char * gets_with_tab(char * buf, int max)
             continue;
           else
           {
-            in = buf + i;
+            in = buf;
             ci = de.name;
             while(*in && *ci && *in == *ci)
             {
               ++in;
               ++ci;
             }
+            if(*in)
+              continue;
             write(1, ci, strlen(ci));
             while(*ci)
               buf[i++] = *ci++;
+            buf[i] = '\0';
+            // write(1, buf, strlen(buf));
             break;
           }
         }
@@ -243,6 +246,9 @@ char * gets_with_tab(char * buf, int max)
     }
     else
       buf[i++] = c;
+
+    if(c == '\t')
+      continue;
 
     if(c == '\n' || c == '\r')
       break;
@@ -257,8 +263,8 @@ int getcmd(char *buf, int nbuf) {
   if (st.type != T_FILE)
     fprintf(2, "$ ");
   memset(buf, 0, nbuf);
-  gets(buf, nbuf);
-  // gets_with_tab(buf, nbuf); // XXX gets with tab completion
+  // gets(buf, nbuf);
+  gets_with_tab(buf, nbuf); // XXX gets with tab completion
 
   if (buf[0] == 0) // EOF
     return -1;
