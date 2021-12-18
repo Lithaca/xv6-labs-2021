@@ -1,0 +1,21 @@
+{
+  "files.associations": {
+    "user.h": "c",
+    "condition_variable": "c",
+    "types.h": "c",
+    "syscall.h": "c",
+    "fcntl.h": "c",
+    "stat.h": "c",
+    "atomic": "c",
+    "sstream": "c",
+    "*.tcc": "c",
+    "iosfwd": "c",
+    "istream": "c",
+    "limits": "c",
+    "shared_mutex": "c",
+    "stop_token": "c",
+    "streambuf": "c",
+    "fs.h": "c",
+    "defs.h": "c"
+  }
+}
