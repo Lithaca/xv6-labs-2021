@@ -1,9 +1,9 @@
 // Shell.
 #include "kernel/types.h"
 #include "kernel/fcntl.h"
+#include "kernel/fs.h"
 #include "kernel/stat.h"
 #include "user/user.h"
-#include "kernel/fs.h"
 
 // Parsed command representation
 #define EXEC 1
@@ -100,7 +100,7 @@ struct cmd *parsebuiltin(char *str) {
   }
 
   *cmd = (bcmd->arg) ? ' ' : 0;
-  return (struct cmd*)bcmd;
+  return (struct cmd *)bcmd;
 }
 
 void builtin(struct builtincmd *cmd) {
@@ -201,48 +201,42 @@ void runcmd(struct cmd *cmd) {
   exit(0);
 }
 
-char * gets_with_tab(char * buf, int max)
-{
+char *gets_with_tab(char *buf, int max) {
   int i = 0, cc, fd;
   char c, *ci, *in;
   struct dirent de;
-  while(i+1 < max)
-  {
+  while (i + 1 < max) {
     cc = read(0, &c, 1);
-    if(cc < 1)
+    if (cc < 1)
       break;
-    if(c == '\t')
-    {
-      if((fd = open("./", 0)) >= 0)
-      {
+    if (c == '\t') {
+      if ((fd = open("./", 0)) >= 0) {
         buf[i] = 0;
-        while(read(fd, &de, sizeof(de)) == sizeof(de))
-        {
-          if(de.inum == 0)
+        while (read(fd, &de, sizeof(de)) == sizeof(de)) {
+          if (de.inum == 0)
             continue;
-          else
-          {
+          else {
             // find the start of current word
             in = buf + i;
-            while(*in != ' ' && in > buf)
+            while (*in != ' ' && in > buf)
               --in;
-            if(*in == ' ')
+            if (*in == ' ')
               ++in;
 
-            if(strlen(in) >= strlen(de.name))
+            if (strlen(in) >= strlen(de.name))
               continue;
 
             // name matching
             ci = de.name;
-            while(*in && *ci && *in == *ci)
-            {
+            while (*in && *ci && *in == *ci) {
               ++in;
               ++ci;
             }
-            if(*in)
+            if (*in)
               continue;
-            write(1, ci, strlen(ci));
-            while(*ci)
+            // write(1, ci, strlen(ci));
+            printf("%s", ci);
+            while (*ci)
               buf[i++] = *ci++;
             buf[i] = '\0';
             // write(1, buf, strlen(buf));
@@ -251,11 +245,10 @@ char * gets_with_tab(char * buf, int max)
         }
         close(fd);
       }
-    }
-    else
+    } else
       buf[i++] = c;
 
-    if(c == '\n' || c == '\r')
+    if (c == '\n' || c == '\r')
       break;
   }
   buf[i] = '\0';
