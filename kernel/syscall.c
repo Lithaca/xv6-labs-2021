@@ -6,6 +6,7 @@
 #include "proc.h"
 #include "syscall.h"
 #include "defs.h"
+#include "sysinfo.h"
 
 // Fetch the uint64 at addr from the current process.
 int
@@ -105,6 +106,7 @@ extern uint64 sys_wait(void);
 extern uint64 sys_write(void);
 extern uint64 sys_uptime(void);
 uint64 sys_trace(void);
+extern uint64 sys_sysinfo(void);
 
 static uint64 (*syscalls[])(void) = {
 [SYS_fork]    sys_fork,
@@ -129,6 +131,7 @@ static uint64 (*syscalls[])(void) = {
 [SYS_mkdir]   sys_mkdir,
 [SYS_close]   sys_close,
 [SYS_trace]   sys_trace,
+[SYS_sysinfo] sys_sysinfo,
 };
 
 static char*syscall_name[] = {
@@ -155,6 +158,7 @@ static char*syscall_name[] = {
   "mkdir",
   "close",
   "trace",
+  "sysinfo",
 };
 
 void
@@ -181,5 +185,21 @@ uint64 sys_trace()
   uint64 mask = argraw(0);
   struct proc *p = myproc();
   p->tracemask = mask;
+  return 0;
+}
+
+uint64 sys_sysinfo(void)
+{
+  uint64 addr;
+  struct sysinfo info;
+  struct proc *mp = myproc();
+  if(argaddr(0, &addr) < 0)
+    return -1;
+
+  info.freemem = kfreemem();
+  info.nproc = proc_amount();
+
+  if(copyout(mp->pagetable, addr, (char*)&info, sizeof(info)) < 0)
+    return -1;
   return 0;
 }
