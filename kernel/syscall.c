@@ -161,17 +161,33 @@ static char*syscall_name[] = {
   "sysinfo",
 };
 
+void tracearg(int syscall_num);
+
 void
 syscall(void)
 {
   int num;
+  uint64 ret;
   struct proc *p = myproc();
 
   num = p->trapframe->a7;
   if(num > 0 && num < NELEM(syscalls) && syscalls[num]) {
-    p->trapframe->a0 = syscalls[num]();
-    if(p->tracemask & (1 << num))
-      printf("%d: syscall %s -> %d\n", p->pid, syscall_name[num], p->trapframe->a0);
+    ret = syscalls[num]();
+    if(p->tracemask & (1 << num)) {
+      printf("%d: syscall %s", p->pid, syscall_name[num]);
+
+      // Print syscall arguments
+      printf("(");
+      tracearg(num);
+      printf(")");
+
+      if(num == SYS_exit)
+        printf("\n");
+    }
+    if(p->tracemask & (1 << num)) {
+      printf(" -> %d\n", ret);
+    }
+    p->trapframe->a0 = ret;
   } else {
     printf("%d %s: unknown sys call %d\n",
             p->pid, p->name, num);
@@ -202,4 +218,111 @@ uint64 sys_sysinfo(void)
   if(copyout(mp->pagetable, addr, (char*)&info, sizeof(info)) < 0)
     return -1;
   return 0;
+}
+
+void tracearg(int num)
+{
+
+  int argi = 0;
+  uint64 argp = 0, *strlst;
+  char args[128];
+
+  switch(num) // arg1
+  {
+    // int
+    case SYS_exit:
+    case SYS_write:
+    case SYS_read:
+    case SYS_close:
+    case SYS_kill:
+    case SYS_fstat:
+    case SYS_dup:
+    case SYS_sbrk:
+    case SYS_sleep:
+    case SYS_trace:
+    if(argint(0, &argi) < 0)
+      return;
+    printf("%d", argi);
+    break;
+    // int *, void *
+    case SYS_wait:
+    case SYS_pipe:
+    case SYS_sysinfo:
+    if(argaddr(0, &argp) < 0)
+      return;
+    printf("%p", argp);
+    break;
+    // char *
+    case SYS_exec:
+    case SYS_open:
+    case SYS_mknod:
+    case SYS_unlink:
+    case SYS_link:
+    case SYS_mkdir:
+    case SYS_chdir:
+    memset(args, 0, 128);
+    if(argstr(0, args, 128) < 0)
+      return;
+    printf("\"%s\"", args);
+    break;
+    default:
+    break;
+  }
+
+  switch(num) // arg2
+  {
+    // int
+    case SYS_open:
+    case SYS_mknod:
+    if(argint(1, &argi) < 0)
+      return;
+    printf(", %d", argi);
+    break;
+    // void *
+    case SYS_write:
+    case SYS_read:
+    case SYS_fstat:
+    if(argaddr(1, &argp) < 0)
+      return;
+    printf(", %p", argp);
+    break;
+    // char *
+    case SYS_link:
+    memset(args, 0, 128);
+    if(argstr(1, args, 128) < 0)
+      return;
+    printf(", \"%s\"", args);
+    break;
+    // char **
+    case SYS_exec:
+    if(argaddr(1, &argp) < 0)
+      return;
+    strlst = (uint64* )argp;
+    for(argi = 0; fetchaddr((uint64)(strlst + argi), &argp) >= 0; ++argi)
+    {
+      if(argp == 0)
+        break;
+      memset(args, 0, 128);
+      if(fetchstr(argp, args, 128) < 0)
+        break;
+      printf(", \"%s\"", args);
+    }
+    break;
+    default:
+    break;
+  }
+
+  switch(num) // arg3
+  {
+    // int
+    case SYS_write:
+    case SYS_read:
+    case SYS_mknod:
+    if(argint(2, &argi) < 0)
+      return;
+    printf(", %d", argi);
+    break;
+    default:
+    break;
+  }
 }
