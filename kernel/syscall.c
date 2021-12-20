@@ -201,7 +201,7 @@ uint64 sys_trace()
   uint64 mask = argraw(0);
   struct proc *p = myproc();
   if(mask & (1 << SYS_trace))
-      printf("%d: syscall trace(%d)", p->pid, mask);
+      printf("%d: syscall trace(%p)", p->pid, mask);
   p->tracemask = mask;
   return 0;
 }
@@ -241,12 +241,12 @@ void tracearg(int num)
     case SYS_dup:
     case SYS_sbrk:
     case SYS_sleep:
-    case SYS_trace:
     if(argint(0, &argi) < 0)
       return;
     printf("%d", argi);
     break;
     // int *, void *
+    case SYS_trace:
     case SYS_wait:
     case SYS_pipe:
     case SYS_sysinfo:
