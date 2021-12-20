@@ -172,7 +172,6 @@ syscall(void)
 
   num = p->trapframe->a7;
   if(num > 0 && num < NELEM(syscalls) && syscalls[num]) {
-    ret = syscalls[num]();
     if(p->tracemask & (1 << num)) {
       printf("%d: syscall %s", p->pid, syscall_name[num]);
 
@@ -184,6 +183,7 @@ syscall(void)
       if(num == SYS_exit)
         printf("\n");
     }
+    ret = syscalls[num]();
     if(p->tracemask & (1 << num)) {
       printf(" -> %d\n", ret);
     }
@@ -200,6 +200,8 @@ uint64 sys_trace()
 {
   uint64 mask = argraw(0);
   struct proc *p = myproc();
+  if(mask & (1 << SYS_trace))
+      printf("%d: syscall trace(%d)", p->pid, mask);
   p->tracemask = mask;
   return 0;
 }
