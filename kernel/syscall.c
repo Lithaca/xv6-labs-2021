@@ -209,6 +209,7 @@ uint64 sys_trace()
 uint64 sys_sysinfo(void)
 {
   uint64 addr;
+  int la_sum, i, qe, cnt;
   struct sysinfo info;
   struct proc *mp = myproc();
   if(argaddr(0, &addr) < 0)
@@ -216,6 +217,31 @@ uint64 sys_sysinfo(void)
 
   info.freemem = kfreemem();
   info.nproc = proc_amount();
+
+  i = la_i;
+  qe = i;
+  cnt = 0;
+  la_sum = 0;
+  do
+  {
+    la_sum += la[i];
+    i = (i - 1 + 900) % 900;
+    ++cnt;
+    switch(cnt)
+    {
+      case 60:
+        info.la1m = la_sum / 60.0;
+        break;
+      case 300:
+        info.la5m = la_sum / 300.0;
+        break;
+      case 900:
+        info.la15m = la_sum / 900.0;
+        break;
+      default:
+        break;
+    }
+  }while(i != qe);
 
   if(copyout(mp->pagetable, addr, (char*)&info, sizeof(info)) < 0)
     return -1;

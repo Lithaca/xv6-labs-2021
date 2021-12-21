@@ -42,33 +42,33 @@ void
 testmem() {
   struct sysinfo info;
   uint64 n = countfree();
-  
+
   sinfo(&info);
 
   if (info.freemem!= n) {
     printf("FAIL: free mem %d (bytes) instead of %d\n", info.freemem, n);
     exit(1);
   }
-  
+
   if((uint64)sbrk(PGSIZE) == 0xffffffffffffffff){
     printf("sbrk failed");
     exit(1);
   }
 
   sinfo(&info);
-    
+
   if (info.freemem != n-PGSIZE) {
     printf("FAIL: free mem %d (bytes) instead of %d\n", n-PGSIZE, info.freemem);
     exit(1);
   }
-  
+
   if((uint64)sbrk(-PGSIZE) == 0xffffffffffffffff){
     printf("sbrk failed");
     exit(1);
   }
 
   sinfo(&info);
-    
+
   if (info.freemem != n) {
     printf("FAIL: free mem %d (bytes) instead of %d\n", n, info.freemem);
     exit(1);
@@ -78,7 +78,7 @@ testmem() {
 void
 testcall() {
   struct sysinfo info;
-  
+
   if (sysinfo(&info) < 0) {
     printf("FAIL: sysinfo failed\n");
     exit(1);
@@ -95,10 +95,17 @@ void testproc() {
   uint64 nproc;
   int status;
   int pid;
-  
+
   sinfo(&info);
   nproc = info.nproc;
 
+  printf("load average: %d.%d, %d.%d, %d.%d\n",
+  (int)(info.la1m),
+  (int)(info.la1m*100) % 100,
+  (int)(info.la5m),
+  (int)(info.la5m*10) % 10,
+  (int)(info.la15m),
+  (int)(info.la15m*10) % 10);
   pid = fork();
   if(pid < 0){
     printf("sysinfotest: fork failed\n");
