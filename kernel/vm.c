@@ -45,7 +45,7 @@ kvmmake(void)
 
   // map kernel stacks
   proc_mapstacks(kpgtbl);
-  
+
   return kpgtbl;
 }
 
@@ -142,7 +142,7 @@ mappages(pagetable_t pagetable, uint64 va, uint64 size, uint64 pa, int perm)
 
   if(size == 0)
     panic("mappages: size");
-  
+
   a = PGROUNDDOWN(va);
   last = PGROUNDDOWN(va + size - 1);
   for(;;){
@@ -333,7 +333,7 @@ void
 uvmclear(pagetable_t pagetable, uint64 va)
 {
   pte_t *pte;
-  
+
   pte = walk(pagetable, va, 0);
   if(pte == 0)
     panic("uvmclear");
@@ -430,5 +430,29 @@ copyinstr(pagetable_t pagetable, char *dst, uint64 srcva, uint64 max)
     return 0;
   } else {
     return -1;
+  }
+}
+
+void vmprint(pagetable_t pagetable)
+{
+  pte_t pte;
+  printf("page table %p\n", pagetable);
+  for(int i = 0; i < 512; ++i) {
+    pte = pagetable[i];
+    printf("..%d: pte %p pa %p\n", i, pte, PTE2PA(pte));
+    if(pte & PTE_V) {
+      pagetable_t pt1 = (pagetable_t)PTE2PA(pte);
+      for(int j = 0; j < 512; ++j) {
+        pte = pt1[j];
+        printf(".. ..%d: pte %p pa %p\n", j, pte, PTE2PA(pte));
+        if(pte & PTE_V) {
+          pagetable_t pt2 = (pagetable_t)PTE2PA(pte);
+          for(int k = 0; k < 512; ++k) {
+            pte = pt2[k];
+            printf(".. .. ..%d: pte %p pa %p\n", k, pte, PTE2PA(pte));
+          }
+        }
+      }
+    }
   }
 }
