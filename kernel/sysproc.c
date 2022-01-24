@@ -99,9 +99,7 @@ sys_pgaccess(void)
   for(i = 0; i < len; ++i)
   {
     base = buf + PGSIZE * i;
-    // printf("buf[%d] = %d\n", i, *(char*)walkaddr(p->pagetable, buf+PGSIZE*i));
     pte = walk(p->pagetable, base, 0);
-    // printf("pte %d: %p\n", i, *pte);
     if(PTE_FLAGS(*pte) & PTE_A)
       bits |= (1L << i);
     *pte &= ~PTE_A; // clear access flag bit

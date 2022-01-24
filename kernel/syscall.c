@@ -104,6 +104,7 @@ extern uint64 sys_unlink(void);
 extern uint64 sys_wait(void);
 extern uint64 sys_write(void);
 extern uint64 sys_uptime(void);
+extern uint64 sys_dirty(void);
 #ifdef LAB_NET
 extern uint64 sys_connect(void);
 #endif
@@ -133,6 +134,7 @@ static uint64 (*syscalls[])(void) = {
 [SYS_link]    sys_link,
 [SYS_mkdir]   sys_mkdir,
 [SYS_close]   sys_close,
+[SYS_dirty]   sys_dirty,
 #ifdef LAB_NET
 [SYS_connect] sys_connect,
 #endif
@@ -157,4 +159,34 @@ syscall(void)
             p->pid, p->name, num);
     p->trapframe->a0 = -1;
   }
+}
+
+uint64 sys_dirty(void)
+{
+  int cnt = 0;
+  pte_t pte;
+  struct proc *p = myproc();
+  pagetable_t pagetable = p->pagetable;
+
+  for(int i = 0; i < 512; ++i) {
+    pte = pagetable[i];
+    if(pte & PTE_V) {
+      pagetable_t pt1 = (pagetable_t)PTE2PA(pte);
+      for(int j = 0; j < 512; ++j) {
+        pte = pt1[j];
+        if(pte & PTE_V) {
+          pagetable_t pt2 = (pagetable_t)PTE2PA(pte);
+          for(int k = 0; k < 512; ++k) {
+            pte = pt2[k];
+            if(pte & PTE_D) {
+              printf("Dirty Page: pte %p pa %p\n", pte, PTE2PA(pte));
+              ++cnt;
+              pt2[k] &= ~PTE_D; // Clear dirty flag bit
+            }
+          }
+        }
+      }
+    }
+  }
+  return cnt;
 }
