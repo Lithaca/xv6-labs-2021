@@ -46,7 +46,7 @@ sys_sbrk(void)
 
   if(argint(0, &n) < 0)
     return -1;
-  
+
   addr = myproc()->sz;
   if(growproc(n) < 0)
     return -1;
@@ -81,6 +81,32 @@ int
 sys_pgaccess(void)
 {
   // lab pgtbl: your code here.
+  int i, len;
+  pte_t *pte;
+  uint64 buf, abits, base;
+  uint bits = 0;
+  struct proc* p = myproc();
+  if(argaddr(0, &buf) < 0)
+    return -1;
+  if(argint(1, &len) < 0)
+    return -1;
+  if(argaddr(2, &abits) < 0)
+    return -1;
+
+  if(len > 32)
+    len = 32;
+
+  for(i = 0; i < len; ++i)
+  {
+    base = buf + PGSIZE * i;
+    // printf("buf[%d] = %d\n", i, *(char*)walkaddr(p->pagetable, buf+PGSIZE*i));
+    pte = walk(p->pagetable, base, 0);
+    // printf("pte %d: %p\n", i, *pte);
+    if(PTE_FLAGS(*pte) & PTE_A)
+      bits |= (1L << i);
+    *pte &= ~PTE_A; // clear access flag bit
+  }
+  copyout(p->pagetable, abits, (char*)&bits, sizeof(bits));
   return 0;
 }
 #endif

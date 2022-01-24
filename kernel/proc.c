@@ -183,8 +183,16 @@ proc_pagetable(struct proc *p)
   pagetable = uvmcreate();
   if(pagetable == 0)
     return 0;
+
   // Allocate a pid page
   if((pid_page = (struct usyscall *)kalloc()) == 0) {
+    uvmfree(pagetable, 0);
+    return 0;
+  }
+  // map user shared pid-page just blow TRAPFRAME
+  if(mappages(pagetable, USYSCALL, PGSIZE,
+              (uint64)(pid_page), PTE_R | PTE_U) < 0){
+    kfree(pid_page);
     uvmfree(pagetable, 0);
     return 0;
   }
@@ -203,16 +211,6 @@ proc_pagetable(struct proc *p)
   if(mappages(pagetable, TRAPFRAME, PGSIZE,
               (uint64)(p->trapframe), PTE_R | PTE_W) < 0){
     uvmunmap(pagetable, TRAMPOLINE, 1, 0);
-    uvmfree(pagetable, 0);
-    return 0;
-  }
-
-  // map user shared pid-page just blow TRAPFRAME
-  if(mappages(pagetable, USYSCALL, PGSIZE,
-              (uint64)(pid_page), PTE_R | PTE_U | PTE_W) < 0){
-    uvmunmap(pagetable, TRAMPOLINE, 1, 0);
-    uvmunmap(pagetable, TRAPFRAME, 1, 0);
-    kfree(pid_page);
     uvmfree(pagetable, 0);
     return 0;
   }
