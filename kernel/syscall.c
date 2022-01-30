@@ -144,14 +144,17 @@ static uint64 (*syscalls[])(void) = {
 };
 
 
-
+extern struct proc * initproc;
 void
 syscall(void)
 {
-  int num;
+  static int num;
   struct proc *p = myproc();
+  if(p == initproc)
+    printf("initproc\n");
 
   num = p->trapframe->a7;
+  printf("syscall(%d)\n", num);
   if(num > 0 && num < NELEM(syscalls) && syscalls[num]) {
     p->trapframe->a0 = syscalls[num]();
   } else {

@@ -256,8 +256,8 @@ userinit(void)
   p->sz = PGSIZE;
 
   // prepare for the very first "return" from kernel to user.
-  p->trapframe->epc = 0;      // user program counter
-  p->trapframe->sp = PGSIZE;  // user stack pointer
+  p->trapframe->epc = PGSIZE;      // user program counter
+  p->trapframe->sp = PGSIZE*2;  // user stack pointer
 
   safestrcpy(p->name, "initcode", sizeof(p->name));
   p->cwd = namei("/");
@@ -275,7 +275,7 @@ growproc(int n)
   uint sz;
   struct proc *p = myproc();
 
-  sz = p->sz;
+  sz = p->sz + PGSIZE;
   if(n > 0){
     if((sz = uvmalloc(p->pagetable, sz, sz + n)) == 0) {
       return -1;
@@ -283,7 +283,7 @@ growproc(int n)
   } else if(n < 0){
     sz = uvmdealloc(p->pagetable, sz, sz + n);
   }
-  p->sz = sz;
+  p->sz = sz - PGSIZE;
   return 0;
 }
 
