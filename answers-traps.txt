@@ -1,0 +1,35 @@
+# Answers to lab trap
+
+## RISC-V assembly
+
+Q1: Which registers contain arguments to functions?
+
+A1: According to RISC-V calling convention, the function arguments are saved
+in register `a0`-`a7` and calling stack(for more arguments)
+
+Q2: Where is the call to function `f` in the assembly code for main?
+Where is the call to `g`?
+
+A2: The assembly code indicates that the function `f` and `g` is regard as
+`inline` function which means they are expanded and excuted during the
+compiling time.
+
+Q3: At what address is the function `printf` located?
+
+A3: The function printf located in va `0x628`
+
+Q4: What value is in the register `ra` just after the `jalr` to `printf` in
+`main`?
+
+A4: va `0x38`
+
+Q5: run the code
+
+A5: output: "He110 World"
+
+If the RISC-V is big-endian, `i` should be `0x726c6400` and `57616` need not
+to change.
+
+Q6: the number after "y=" will be unexpected since the `printf` has a
+various length parameter list and the behaviour will be undefined in the
+sence.
