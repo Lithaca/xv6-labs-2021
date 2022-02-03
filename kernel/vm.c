@@ -45,7 +45,7 @@ kvmmake(void)
 
   // map kernel stacks
   proc_mapstacks(kpgtbl);
-  
+
   return kpgtbl;
 }
 
@@ -142,7 +142,7 @@ mappages(pagetable_t pagetable, uint64 va, uint64 size, uint64 pa, int perm)
 
   if(size == 0)
     panic("mappages: size");
-  
+
   a = PGROUNDDOWN(va);
   last = PGROUNDDOWN(va + size - 1);
   for(;;){
@@ -165,7 +165,7 @@ mappages(pagetable_t pagetable, uint64 va, uint64 size, uint64 pa, int perm)
 void
 uvmunmap(pagetable_t pagetable, uint64 va, uint64 npages, int do_free)
 {
-  uint64 a;
+  uint64 a, pa;
   pte_t *pte;
 
   if((va % PGSIZE) != 0)
@@ -179,8 +179,12 @@ uvmunmap(pagetable_t pagetable, uint64 va, uint64 npages, int do_free)
     if(PTE_FLAGS(*pte) == PTE_V)
       panic("uvmunmap: not a leaf");
     if(do_free){
-      uint64 pa = PTE2PA(*pte);
-      kfree((void*)pa);
+      pa = PTE2PA(*pte);
+      acquire(&pgrclock);
+      --pgrc[PGRC(pa)]; // Decrease ref count
+      release(&pgrclock);
+      if(pgrc[PGRC(pa)] == 0)
+        kfree((void*)pa);
     }
     *pte = 0;
   }
@@ -303,27 +307,46 @@ uvmcopy(pagetable_t old, pagetable_t new, uint64 sz)
   pte_t *pte;
   uint64 pa, i;
   uint flags;
-  char *mem;
+  // char *mem;
+  uint isCOW = 0;
 
   for(i = 0; i < sz; i += PGSIZE){
     if((pte = walk(old, i, 0)) == 0)
       panic("uvmcopy: pte should exist");
     if((*pte & PTE_V) == 0)
       panic("uvmcopy: page not present");
+    if(*pte & PTE_COW)
+      isCOW = 1;
+    else {
+      *pte &= ~PTE_W;
+      *pte |= PTE_COW;
+    }
     pa = PTE2PA(*pte);
     flags = PTE_FLAGS(*pte);
-    if((mem = kalloc()) == 0)
-      goto err;
-    memmove(mem, (char*)pa, PGSIZE);
-    if(mappages(new, i, PGSIZE, (uint64)mem, flags) != 0){
-      kfree(mem);
+    // if((mem = kalloc()) == 0)
+    //   goto err;
+    // memmove(mem, (char*)pa, PGSIZE);
+    // if(mappages(new, i, PGSIZE, (uint64)mem, flags) != 0){
+    //   kfree(mem);
+    //   goto err;
+    // }
+
+    // COW
+    if(mappages(new, i, PGSIZE, pa, flags) != 0){
       goto err;
     }
+    acquire(&pgrclock);
+    ++pgrc[PGRC(pa)];
+    release(&pgrclock);
   }
   return 0;
 
  err:
   uvmunmap(new, 0, i / PGSIZE, 1);
+  if(isCOW == 0){
+    *pte |= PTE_W;
+    *pte &= ~PTE_COW;
+  }
   return -1;
 }
 
@@ -333,7 +356,7 @@ void
 uvmclear(pagetable_t pagetable, uint64 va)
 {
   pte_t *pte;
-  
+
   pte = walk(pagetable, va, 0);
   if(pte == 0)
     panic("uvmclear");
@@ -347,16 +370,34 @@ int
 copyout(pagetable_t pagetable, uint64 dstva, char *src, uint64 len)
 {
   uint64 n, va0, pa0;
+  pte_t * pte;
 
   while(len > 0){
     va0 = PGROUNDDOWN(dstva);
-    pa0 = walkaddr(pagetable, va0);
+    pte = walk(pagetable, va0, 0);
+    pa0 = PTE2PA(*pte);
     if(pa0 == 0)
       return -1;
     n = PGSIZE - (dstva - va0);
     if(n > len)
       n = len;
-    memmove((void *)(pa0 + (dstva - va0)), src, n);
+    if(*pte & PTE_COW) { // COW
+      char * mem;
+      int flags = PTE_FLAGS(*pte);
+      flags |= PTE_W;
+      flags &= ~PTE_COW;
+
+      if((mem = kalloc()) == 0)
+        return -1;
+      memmove(mem, (void*)pa0, PGSIZE);
+
+      uvmunmap(pagetable, va0, 1, 0);
+      if(mappages(pagetable, va0, PGSIZE, (uint64)mem, flags) != 0)
+        return -1;
+      memmove((void *)(mem + (dstva - va0)), src, n);
+    }
+    else
+      memmove((void *)(pa0 + (dstva - va0)), src, n);
 
     len -= n;
     src += n;

@@ -46,11 +46,13 @@ usertrap(void)
   w_stvec((uint64)kernelvec);
 
   struct proc *p = myproc();
-  
+
   // save user program counter.
   p->trapframe->epc = r_sepc();
-  
-  if(r_scause() == 8){
+
+  uint64 scause = r_scause();
+
+  if(scause == 8){
     // system call
 
     if(p->killed)
@@ -67,8 +69,47 @@ usertrap(void)
     syscall();
   } else if((which_dev = devintr()) != 0){
     // ok
+  // } else if(scause == 12) { // instruction page fault
+  //   uint64 va = r_stval();
+  //   pte_t *pte = walk(p->pagetable, va, 0);
+  //   if(*pte & PTE_COW)
+  //     *pte |= PTE_X;
+  //   else
+  //     p->killed = 1;
+  } else if(scause == 15) { // write page fault handler for COW
+    uint64 va = r_stval();
+    pte_t *pte = walk(p->pagetable, va, 0);
+
+    if(*pte & PTE_COW) {
+      uint64 pa = PTE2PA(*pte);
+      pa = PGROUNDDOWN(pa);
+      va = PGROUNDDOWN(va);
+
+      char *mem;
+      int flags = PTE_FLAGS(*pte);
+      flags |= PTE_W;
+      flags &= ~PTE_COW;
+
+      // Allocate an new page and copy data
+      if((mem = kalloc()) == 0) {
+        printf("usertrap: kalloc pid = %d\n", p->pid);
+        p->killed = 1;
+      } else {
+        memmove(mem, (char*)pa, PGSIZE);
+
+        // Unmap old page and remap to new page
+        uvmunmap(p->pagetable, va, 1, 1);
+        if(mappages(p->pagetable, va, PGSIZE, (uint64)mem, flags) != 0) {
+          kfree(mem);
+          printf("usertrap: mappages pid = %d\n", p->pid);
+          p->killed = 1;
+        }
+      }
+    } else { // Invalid write
+      p->killed = 1;
+    }
   } else {
-    printf("usertrap(): unexpected scause %p pid=%d\n", r_scause(), p->pid);
+    printf("usertrap(): unexpected scause %p pid=%d\n", scause, p->pid);
     printf("            sepc=%p stval=%p\n", r_sepc(), r_stval());
     p->killed = 1;
   }
@@ -108,7 +149,7 @@ usertrapret(void)
 
   // set up the registers that trampoline.S's sret will use
   // to get to user space.
-  
+
   // set S Previous Privilege mode to User.
   unsigned long x = r_sstatus();
   x &= ~SSTATUS_SPP; // clear SPP to 0 for user mode
@@ -121,7 +162,7 @@ usertrapret(void)
   // tell trampoline.S the user page table to switch to.
   uint64 satp = MAKE_SATP(p->pagetable);
 
-  // jump to trampoline.S at the top of memory, which 
+  // jump to trampoline.S at the top of memory, which
   // switches to the user page table, restores user registers,
   // and switches to user mode with sret.
   uint64 fn = TRAMPOLINE + (userret - trampoline);
@@ -130,14 +171,14 @@ usertrapret(void)
 
 // interrupts and exceptions from kernel code go here via kernelvec,
 // on whatever the current kernel stack is.
-void 
+void
 kerneltrap()
 {
   int which_dev = 0;
   uint64 sepc = r_sepc();
   uint64 sstatus = r_sstatus();
   uint64 scause = r_scause();
-  
+
   if((sstatus & SSTATUS_SPP) == 0)
     panic("kerneltrap: not from supervisor mode");
   if(intr_get() != 0)
@@ -207,7 +248,7 @@ devintr()
     if(cpuid() == 0){
       clockintr();
     }
-    
+
     // acknowledge the software interrupt by clearing
     // the SSIP bit in sip.
     w_sip(r_sip() & ~2);
