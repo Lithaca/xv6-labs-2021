@@ -50,9 +50,7 @@ usertrap(void)
   // save user program counter.
   p->trapframe->epc = r_sepc();
 
-  uint64 scause = r_scause();
-
-  if(scause == 8){
+  if(r_scause() == 8){
     // system call
 
     if(p->killed)
@@ -69,47 +67,42 @@ usertrap(void)
     syscall();
   } else if((which_dev = devintr()) != 0){
     // ok
-  // } else if(scause == 12) { // instruction page fault
-  //   uint64 va = r_stval();
-  //   pte_t *pte = walk(p->pagetable, va, 0);
-  //   if(*pte & PTE_COW)
-  //     *pte |= PTE_X;
-  //   else
-  //     p->killed = 1;
-  } else if(scause == 15) { // write page fault handler for COW
+  } else if(r_scause() == 15) { // write page fault handler for COW
     uint64 va = r_stval();
-    pte_t *pte = walk(p->pagetable, va, 0);
-
-    if(*pte & PTE_COW) {
-      uint64 pa = PTE2PA(*pte);
-      pa = PGROUNDDOWN(pa);
-      va = PGROUNDDOWN(va);
-
-      char *mem;
-      int flags = PTE_FLAGS(*pte);
-      flags |= PTE_W;
-      flags &= ~PTE_COW;
-
-      // Allocate an new page and copy data
-      if((mem = kalloc()) == 0) {
-        printf("usertrap: kalloc pid = %d\n", p->pid);
-        p->killed = 1;
-      } else {
-        memmove(mem, (char*)pa, PGSIZE);
-
-        // Unmap old page and remap to new page
-        uvmunmap(p->pagetable, va, 1, 1);
-        if(mappages(p->pagetable, va, PGSIZE, (uint64)mem, flags) != 0) {
-          kfree(mem);
-          printf("usertrap: mappages pid = %d\n", p->pid);
-          p->killed = 1;
-        }
-      }
-    } else { // Invalid write
+    if(va >= MAXVA)
       p->killed = 1;
+    else {
+      pte_t *pte = walk(p->pagetable, va, 0);
+
+      if(*pte & PTE_V && *pte & PTE_COW) {
+        uint64 pa = PTE2PA(*pte);
+        pa = PGROUNDDOWN(pa);
+        va = PGROUNDDOWN(va);
+
+        char *mem;
+        int flags = PTE_FLAGS(*pte);
+        flags |= PTE_W;
+        flags &= ~PTE_COW;
+
+        // Allocate an new page and copy data
+        if((mem = kalloc()) == 0) { // Memory exhausted
+          p->killed = 1;
+        } else {
+          memmove(mem, (char*)pa, PGSIZE);
+
+          // Unmap old page and remap to new page
+          uvmunmap(p->pagetable, va, 1, 1);
+          if(mappages(p->pagetable, va, PGSIZE, (uint64)mem, flags) != 0) {
+            kfree(mem); // Failed to map page
+            p->killed = 1;
+          }
+        }
+      } else { // Invalid write
+        p->killed = 1;
+      }
     }
   } else {
-    printf("usertrap(): unexpected scause %p pid=%d\n", scause, p->pid);
+    printf("usertrap(): unexpected scause %p pid=%d\n", r_scause(), p->pid);
     printf("            sepc=%p stval=%p\n", r_sepc(), r_stval());
     p->killed = 1;
   }

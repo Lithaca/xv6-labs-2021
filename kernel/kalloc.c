@@ -63,12 +63,10 @@ kfree(void *pa)
   r = (struct run*)pa;
 
   acquire(&kmem.lock);
+  pgrc[PGRC(pa)] = 0;
   r->next = kmem.freelist;
   kmem.freelist = r;
   release(&kmem.lock);
-  acquire(&pgrclock);
-  pgrc[PGRC((uint64)pa)] = 0;
-  release(&pgrclock);
 }
 
 // Allocate one 4096-byte page of physical memory.
@@ -81,16 +79,13 @@ kalloc(void)
 
   acquire(&kmem.lock);
   r = kmem.freelist;
-  if(r)
+  if(r) {
     kmem.freelist = r->next;
+    pgrc[PGRC(r)] = 1;   // Init ref count
+  }
   release(&kmem.lock);
 
-
-  if(r) {
+  if(r)
     memset((char*)r, 5, PGSIZE); // fill with junk
-    acquire(&pgrclock);
-    pgrc[PGRC((uint64)r)] = 1;   // Init ref count
-    release(&pgrclock);
-  }
   return (void*)r;
 }
