@@ -115,6 +115,10 @@ piperead(struct pipe *pi, uint64 addr, int n)
       release(&pi->lock);
       return -1;
     }
+    // why no wakeup(&pi->nwrite); here?
+
+    // Since the pipe is empty before any reading, there is no write
+    // The only case that the write is sleeping is that the pipe is full
     sleep(&pi->nread, &pi->lock); //DOC: piperead-sleep
   }
   for(i = 0; i < n; i++){  //DOC: piperead-copy

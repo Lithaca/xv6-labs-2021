@@ -77,6 +77,10 @@ int
 holding(struct spinlock *lk)
 {
   int r;
+  // Why lock is held by core, not the process/thread?
+  // The lock disable interupts, so the core won't change during
+  // holding the lock. Moreover, the process may have more than one
+  // threads that could be excuting on different cores.
   r = (lk->locked && lk->cpu == mycpu());
   return r;
 }
