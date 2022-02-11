@@ -1,0 +1,3 @@
+When two threads are in the function `insert`, they maybe change the entry
+in the same time, and the first changing will be overwrite by the second one,
+thus the first alloced entry will be lost.
