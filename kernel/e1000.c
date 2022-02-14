@@ -50,7 +50,7 @@ e1000_init(uint32 *xregs)
     panic("e1000");
   regs[E1000_TDLEN] = sizeof(tx_ring);
   regs[E1000_TDH] = regs[E1000_TDT] = 0;
-  
+
   // [E1000 14.4] Receive initialization
   memset(rx_ring, 0, sizeof(rx_ring));
   for (i = 0; i < RX_RING_SIZE; i++) {
@@ -85,7 +85,7 @@ e1000_init(uint32 *xregs)
     E1000_RCTL_BAM |                 // enable broadcast
     E1000_RCTL_SZ_2048 |             // 2048-byte rx buffers
     E1000_RCTL_SECRC;                // strip CRC
-  
+
   // ask e1000 for receive interrupts.
   regs[E1000_RDTR] = 0; // interrupt after every received packet (no timer)
   regs[E1000_RADV] = 0; // interrupt after every packet (no timer)
@@ -102,7 +102,35 @@ e1000_transmit(struct mbuf *m)
   // the TX descriptor ring so that the e1000 sends it. Stash
   // a pointer so that it can be freed after sending.
   //
-  
+  int i = 0;
+
+  acquire(&e1000_lock);
+  while(m){
+    i = regs[E1000_TDT];
+    if(tx_ring[i].status & E1000_TXD_STAT_DD) {
+      // Free transmitted mbufs
+      if(tx_mbufs[i])
+        mbuffree(tx_mbufs[i]);
+      memset(tx_ring + i, 0, sizeof(struct tx_desc));
+
+      // Fill new mbufs
+      tx_mbufs[i] = m;
+      tx_ring[i].addr = (uint64)m->head;
+      tx_ring[i].length = m->len;
+      tx_ring[i].cmd = E1000_TXD_CMD_RS;
+      m = m->next;
+      // Set EOP Flag
+      if(m == 0) {
+        tx_ring[i].cmd |= E1000_TXD_CMD_EOP;
+      }
+      // Update TDT
+      regs[E1000_TDT] = (regs[E1000_TDT] + 1) % TX_RING_SIZE;
+    } else {
+      release(&e1000_lock);
+      return -1;
+    }
+  }
+  release(&e1000_lock);
   return 0;
 }
 
@@ -115,6 +143,41 @@ e1000_recv(void)
   // Check for packets that have arrived from the e1000
   // Create and deliver an mbuf for each packet (using net_rx()).
   //
+  int i = 0, len = 0;
+  struct mbuf *m = 0, *rm = 0, *pkg[RX_RING_SIZE];
+
+  acquire(&e1000_lock);
+  while(regs[E1000_RDT] != regs[E1000_RDH])
+  {
+    if((m = mbufalloc(0)) == 0)
+      panic("e1000_recv: mbufalloc");
+
+    // Get next desc index
+    i = (regs[E1000_RDT] + 1) % RX_RING_SIZE;
+
+    if(rx_ring[i].status & E1000_RXD_STAT_DD) {
+      // Save mbuf
+      rm = rx_mbufs[i];
+      rm->len = rx_ring[i].length;
+
+      // Fresh the desc
+      memset(&rx_ring[i], 0, sizeof(struct rx_desc));
+      rx_mbufs[i] = m;
+      rx_ring[i].addr = (uint64)m->head;
+      // Update RDT
+      regs[E1000_RDT] = i;
+
+      // Stash mbuf
+      pkg[len++] = rm;
+    } else
+      break;
+  }
+  release(&e1000_lock);
+
+  // Send to net layer
+  for(i = 0; i < len; ++i) {
+    net_rx(pkg[i]);
+  }
 }
 
 void
@@ -124,6 +187,5 @@ e1000_intr(void)
   // without this the e1000 won't raise any
   // further interrupts.
   regs[E1000_ICR] = 0xffffffff;
-
   e1000_recv();
 }
