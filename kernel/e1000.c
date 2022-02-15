@@ -19,7 +19,8 @@ static struct mbuf *rx_mbufs[RX_RING_SIZE];
 // remember where the e1000's registers live.
 static volatile uint32 *regs;
 
-struct spinlock e1000_lock;
+struct spinlock e1000_tx_lock;
+struct spinlock e1000_rx_lock;
 
 // called by pci_init().
 // xregs is the memory address at which the
@@ -29,7 +30,8 @@ e1000_init(uint32 *xregs)
 {
   int i;
 
-  initlock(&e1000_lock, "e1000");
+  initlock(&e1000_tx_lock, "e1000_tx");
+  initlock(&e1000_rx_lock, "e1000_rx");
 
   regs = xregs;
 
@@ -104,7 +106,7 @@ e1000_transmit(struct mbuf *m)
   //
   int i = 0;
 
-  acquire(&e1000_lock);
+  acquire(&e1000_tx_lock);
   while(m){
     i = regs[E1000_TDT];
     if(tx_ring[i].status & E1000_TXD_STAT_DD) {
@@ -126,11 +128,11 @@ e1000_transmit(struct mbuf *m)
       // Update TDT
       regs[E1000_TDT] = (regs[E1000_TDT] + 1) % TX_RING_SIZE;
     } else {
-      release(&e1000_lock);
+      release(&e1000_tx_lock);
       return -1;
     }
   }
-  release(&e1000_lock);
+  release(&e1000_tx_lock);
   return 0;
 }
 
@@ -146,7 +148,7 @@ e1000_recv(void)
   int i = 0, len = 0;
   struct mbuf *m = 0, *rm = 0, *pkg[RX_RING_SIZE];
 
-  acquire(&e1000_lock);
+  acquire(&e1000_rx_lock);
   while(regs[E1000_RDT] != regs[E1000_RDH])
   {
     if((m = mbufalloc(0)) == 0)
@@ -172,7 +174,7 @@ e1000_recv(void)
     } else
       break;
   }
-  release(&e1000_lock);
+  release(&e1000_rx_lock);
 
   // Send to net layer
   for(i = 0; i < len; ++i) {
