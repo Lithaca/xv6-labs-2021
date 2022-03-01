@@ -5,6 +5,11 @@
 #include "riscv.h"
 #include "defs.h"
 #include "fs.h"
+#include "spinlock.h"
+#include "sleeplock.h"
+#include "fcntl.h"
+#include "proc.h"
+#include "file.h"
 
 /*
  * the kernel's page table.
@@ -45,7 +50,7 @@ kvmmake(void)
 
   // map kernel stacks
   proc_mapstacks(kpgtbl);
-  
+
   return kpgtbl;
 }
 
@@ -142,7 +147,7 @@ mappages(pagetable_t pagetable, uint64 va, uint64 size, uint64 pa, int perm)
 
   if(size == 0)
     panic("mappages: size");
-  
+
   a = PGROUNDDOWN(va);
   last = PGROUNDDOWN(va + size - 1);
   for(;;){
@@ -333,7 +338,7 @@ void
 uvmclear(pagetable_t pagetable, uint64 va)
 {
   pte_t *pte;
-  
+
   pte = walk(pagetable, va, 0);
   if(pte == 0)
     panic("uvmclear");
@@ -430,5 +435,137 @@ copyinstr(pagetable_t pagetable, char *dst, uint64 srcva, uint64 max)
     return 0;
   } else {
     return -1;
+  }
+}
+
+uint64 sys_mmap(void)
+{
+  uint64 addr, len;
+  int perm, flag, fd, offset;
+  struct proc * p = myproc();
+  struct vma * vma;
+
+  argaddr(0, &addr);
+  argaddr(1, &len);
+  argint(2, &perm);
+  argint(3, &flag);
+  argint(4, &fd);
+  argint(5, &offset);
+
+  if(len == 0)
+    return -1;
+
+  // Writable shared readonly file
+  if(p->ofile[fd]->writable == 0)
+    if(perm & PROT_WRITE && flag & MAP_SHARED)
+      return -1;
+
+  for(vma = p->vma; vma < p->vma + NVMA; ++vma)
+    if(vma->length == 0){
+      // Found one empty vma
+      if(addr == 0){
+        addr = p->mmapsz;
+        p->mmapsz = PGROUNDUP(addr + len);
+      }
+
+      vma->addr = addr;
+      vma->file = p->ofile[fd];
+      vma->length = len;
+
+      vma->perm = PTE_U;
+      if(perm & PROT_READ)
+        vma->perm |= PTE_R;
+      if(perm & PROT_WRITE)
+        vma->perm |= PTE_W;
+
+      vma->flag = flag;
+
+      filedup(p->ofile[fd]);
+      return addr;
+    }
+  // No vma avaliable
+  return -1;
+}
+
+uint64 sys_munmap(void)
+{
+  int i;
+  uint64 addr, len;
+  struct vma * vma;
+  struct proc *p = myproc();
+
+  argaddr(0, &addr);
+  argaddr(1, &len);
+
+  // Get VMA
+  for(i = 0; i < NVMA; ++i) {
+    vma = p->vma + i;
+    if(vma->addr <= addr && addr + len <= vma->addr + vma->length)
+      break;
+  }
+  if(i == NVMA)
+    return -1;
+
+  munmap(i, addr, len);
+  return 0;
+}
+
+void munmap(int vi, uint64 addr, uint64 len)
+{
+  /*
+  H  v.a                        E
+  |   |                         |
+  |-----|-----|-...-|-----|-----|
+  | PG  | PG  |     | PG  | PG  |
+  | SZ  | SZ  |     | SZ  | SZ  |
+  |-----|-----|-...-|-----|-----|
+  |   |                   |  |
+  h  addr                 e  t
+  */
+  uint64 H,E,h,e,t;
+  pte_t *pte;
+  struct inode * ip;
+  struct proc *p = myproc();
+  struct vma * vma = p->vma + vi;
+
+  H = PGROUNDDOWN(vma->addr);
+  E = vma->addr + vma->length;
+  h = PGROUNDDOWN(addr);
+  t = addr + len;
+  e = PGROUNDDOWN(t);
+  ip = vma->file->ip;
+
+  begin_op();
+  ilock(ip);
+  for(uint64 a = h; a < e; a += PGSIZE) {
+    pte = walk(p->pagetable, a, 0);
+    if(pte && *pte & PTE_V) {
+      if(*pte & PTE_D && vma->flag & MAP_SHARED) {
+        if(a < addr)
+          writei(ip, 1, addr, addr - H, PGSIZE - (addr - h));
+        else
+          writei(ip, 1, a, a - H, PGSIZE);
+      }
+      if(a == H && addr > vma->addr)
+        continue;
+      uvmunmap(p->pagetable, a, 1, 1);
+    }
+  }
+
+  if(e < t) {
+    writei(ip, 1, e, e - H, t - e);
+    if(t == E && addr == vma->addr)
+      uvmunmap(p->pagetable, e, 1, 1);
+  }
+  iunlock(ip);
+  end_op();
+
+  vma->length -= len;
+  if(addr == vma->addr)
+    vma->addr += len;
+
+  if(vma->length == 0) {
+    fileclose(vma->file);
+    memset(vma, 0, sizeof(struct vma));
   }
 }
